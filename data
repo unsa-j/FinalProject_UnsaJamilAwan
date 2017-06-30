@@ -1,0 +1,283 @@
+app/src/main/java/com/example/aneeq/myflashcard/data/CardContract
+
+
+package com.example.aneeq.myflashcard.data;
+
+import android.net.Uri;
+import android.provider.BaseColumns;
+
+/**
+ * Created by Aneeq on 6/14/2017.
+ */
+
+public class CardContract {
+
+
+    public static final String CONTENT_AUTHORITY = "com.example.aneeq.myflashcards";
+    public static final Uri BASE_CONTENT_URI = Uri.parse("content://" + CONTENT_AUTHORITY);
+
+    public static final String PATH_CARD = "card";
+
+
+    public static final class CardEntry implements BaseColumns {
+        public static final String TABLE_NAME = "card";
+        public static final String COLUMN_DESCRIPTION = "descp";
+        public static final String COLUMN_DATE = "date";
+        public static final String COLUMN_DONE = "done";
+
+
+        public static final Uri CONTENT_URI = BASE_CONTENT_URI.buildUpon().appendPath(PATH_CARD).build();
+        public static final String CONTENT_TYPE = "vnd.android.cursor.dir/" + CONTENT_AUTHORITY + "/" + PATH_CARD;
+        public static final String CONTENT_ITEM_TYPE = "vnd.android.item/" + CONTENT_AUTHORITY + "/" + PATH_CARD;
+
+    }
+}
+
+
+
+
+app/src/main/java/com/example/aneeq/myflashcard/data/CardDBHelper
+
+
+
+package com.example.aneeq.myflashcard.data;
+
+import android.content.Context;
+import android.database.sqlite.SQLiteDatabase;
+import android.database.sqlite.SQLiteOpenHelper;
+
+/**
+ * Created by Aneeq on 6/14/2017.
+ */
+
+public class CardDBHelper extends SQLiteOpenHelper {
+
+
+    private static final int DATABSE_VERSION = 1;
+
+    public static final String DATABASE_NAME = "card.db";
+
+    public CardDBHelper(Context context) { super(context, DATABASE_NAME, null, DATABSE_VERSION);}
+
+
+
+
+    @Override
+    public void onCreate(SQLiteDatabase sqLiteDatabase) {
+
+
+        final String SQL_CREATE_CARD_TABLE = "CREATE TABLE " + CardContract.CardEntry.TABLE_NAME + " (" +
+                CardContract.CardEntry._ID + " INTEGER PRIMARY KEY, " +
+                CardContract.CardEntry.COLUMN_DATE + " TEXT NOT NULL, " +
+                CardContract.CardEntry.COLUMN_DESCRIPTION + " TEXT NOT NULL, " +
+                CardContract.CardEntry.COLUMN_DONE + " INTEGER, " +
+                "UNIQUE (" + CardContract.CardEntry.COLUMN_DATE + CardContract.CardEntry.COLUMN_DESCRIPTION + ") ON" +
+                "CONFLICT IGNORE" +
+                " );";
+
+
+        sqLiteDatabase.execSQL(SQL_CREATE_CARD_TABLE);
+
+    }
+
+    @Override
+    public void onUpgrade(SQLiteDatabase sqLiteDatabase, int oldVersion, int newVersion) {
+        sqLiteDatabase.execSQL("DROP TABLE IF EXISTS");
+        onCreate(sqLiteDatabase);
+    }
+}
+
+
+
+
+app/src/main/java/com/example/aneeq/myflashcard/data/CardProvider
+
+
+package com.example.aneeq.myflashcard.data;
+
+import android.content.ContentProvider;
+import android.content.ContentUris;
+import android.content.ContentValues;
+import android.content.UriMatcher;
+import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
+import android.net.Uri;
+import android.support.annotation.Nullable;
+
+/**
+ * Created by Aneeq on 6/14/2017.
+ */
+
+public class CardProvider extends ContentProvider {
+
+
+
+
+
+
+    private static final int CARD = 100;
+    private static final int CARD_ID = 101;
+
+    private static final UriMatcher sUriMatcher = buildUriMatcher();
+
+    private static UriMatcher buildUriMatcher() {
+
+
+        final UriMatcher matcher = new UriMatcher(UriMatcher.NO_MATCH);
+        final String authority = CardContract.CONTENT_AUTHORITY;
+
+
+        //For each type of URI you must want to add, create a corresponding code.
+
+
+        matcher.addURI(authority, CardContract.PATH_CARD, CARD);
+        matcher.addURI(authority, CardContract.PATH_CARD + "/#", CARD_ID);
+
+
+        return matcher;
+    }
+
+    private CardDBHelper mOpenHelper;
+
+
+
+    @Override public boolean onCreate() {
+        mOpenHelper = new CardDBHelper(getContext());
+        return true;
+    }
+
+    @Nullable
+    @Override public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs, String sortOrder) {
+
+
+        Cursor retCursor;
+        switch (sUriMatcher.match(uri)) {
+            case CARD: {
+                retCursor = mOpenHelper.getReadableDatabase().query(CardContract.CardEntry.TABLE_NAME,
+                        projection,
+                        selection,
+                        selectionArgs,
+                        null,
+                        null,
+                        sortOrder
+                );
+                break;
+            }
+
+            case CARD_ID: {
+                retCursor = mOpenHelper.getReadableDatabase().query(
+                        CardContract.CardEntry.TABLE_NAME,
+                        projection,
+                        CardContract.CardEntry._ID + " = " + ContentUris.parseId(uri) + ";",
+                        null,
+                        null,
+                        null,
+                        sortOrder
+                );
+                break;
+            }
+            default:
+                throw new UnsupportedOperationException("Unknown uri: " + uri);
+        }
+        retCursor.setNotificationUri(getContext().getContentResolver(), uri);
+        return retCursor;
+    }
+
+    @Nullable @Override public String getType( Uri uri) {
+        return null;
+    }
+
+    @Nullable @Override public Uri insert( Uri uri,  ContentValues contentValues) {
+        final SQLiteDatabase db = mOpenHelper.getWritableDatabase();
+        final int match = sUriMatcher.match(uri);
+        Uri returnUri;
+
+        switch (match) {
+            case CARD: {
+                long _id = db.insert(CardContract.CardEntry.TABLE_NAME,  null, contentValues);
+                if ( _id > 0 )
+                    returnUri = CardContract.CardEntry.CONTENT_URI;
+                else
+                    throw new android.database.SQLException("Failed to insert row into " + uri);
+
+                break;
+            }
+            default:
+                throw new UnsupportedOperationException("Unknown uri:" + uri);
+        }
+        getContext().getContentResolver().notifyChange(uri, null);
+        return returnUri;
+
+    }
+
+    public int delete( Uri uri,  String selection,  String[] selectionArgs) {
+        final SQLiteDatabase db = mOpenHelper.getWritableDatabase();
+        final int match = sUriMatcher.match(uri);
+        int rowsDeleted;
+        switch (match) {
+            case CARD:
+                rowsDeleted = db.delete(
+                        CardContract.CardEntry.TABLE_NAME, selection, selectionArgs);
+                break;
+
+            default:
+                throw new UnsupportedOperationException("Unknown uri:" + uri);
+        }
+
+        if (selection == null || rowsDeleted != 0) {
+            getContext().getContentResolver().notifyChange(uri, null);
+        }
+        return rowsDeleted;
+    }
+
+    public int update( Uri uri,  ContentValues values,  String selection, String[] selectionArgs) {
+        final SQLiteDatabase db = mOpenHelper.getWritableDatabase();
+        final int match = sUriMatcher.match(uri);
+        int rowsUpdated;
+
+        switch (match) {
+            case CARD:
+                rowsUpdated = db.update(CardContract.CardEntry.TABLE_NAME, values, selection,
+                        selectionArgs);
+                break;
+
+
+            default:
+                throw new UnsupportedOperationException("Unknown uri:" + uri);
+
+        }
+
+        if (rowsUpdated != 0) {
+            getContext().getContentResolver().notifyChange(uri, null);
+        }
+        return rowsUpdated;
+    }
+
+    @Override
+    public int bulkInsert( Uri uri, ContentValues[] values) {
+        final SQLiteDatabase db = mOpenHelper.getWritableDatabase();
+        final int match = sUriMatcher.match(uri);
+        switch (match) {
+            case CARD:
+                db.beginTransaction();
+                int returnCount = 0;
+                try {
+                    for (ContentValues value : values) {
+                        long _id = db.insert(CardContract.CardEntry.TABLE_NAME, null, value);
+                        if (_id != -1) {
+                            returnCount++;
+                        }
+                    }
+                    db.setTransactionSuccessful();;
+                } finally {
+                    db.setTransactionSuccessful();
+                }
+                getContext().getContentResolver().notifyChange(uri, null);
+                return returnCount;
+            default:
+                return super.bulkInsert(uri, values);
+        }
+    }
+
+
+}
